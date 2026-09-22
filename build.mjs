@@ -1,0 +1,4 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+const html = readFileSync(new URL('./src/page.html', import.meta.url), 'utf8').replace('/* STYLES */', () => readFileSync(new URL('./src/styles.css', import.meta.url), 'utf8')).replace('/* APP */', () => readFileSync(new URL('./src/app.js', import.meta.url), 'utf8').replace('// FEATURES', () => readFileSync(new URL('./src/features.js', import.meta.url), 'utf8').replace('// ACCOUNTS', () => readFileSync(new URL('./src/accounts.js', import.meta.url), 'utf8')).replace('// UX', () => readFileSync(new URL('./src/ux.js', import.meta.url), 'utf8')).replace('// COMPETITIONS', () => readFileSync(new URL('./src/competitions.js', import.meta.url), 'utf8'))));
+writeFileSync(new URL('./index.html', import.meta.url), html);
+console.log('Built self-contained index.html');
