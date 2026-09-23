@@ -1,67 +1,162 @@
 'use strict';
-// 本地演示账号不是生产身份认证；真实权限与并发控制必须由阿里云后端执行。
-const CONFIG = { mode: 'mock', API_BASE_URL: 'https://your-api.example.com/api', timeout: 10000 };
-const DB_KEY = 'xinzhan.lab.demo.v1', SESSION_KEY = 'xinzhan.lab.session.v1';
-const ROLE = {teacher:'指导老师', manager:'负责人', member:'普通成员'};
-const PERMISSIONS = {teacher:{manageCompetitions:true,manageAssets:true,manageMembers:true,assignRoles:true,approve:true},manager:{manageCompetitions:true,manageAssets:true,manageMembers:true,assignRoles:false,approve:true},member:{manageCompetitions:false,manageAssets:false,manageMembers:false,assignRoles:false,approve:false}};
-const PATHS = {trophy:'M8 3h8v7a4 4 0 0 1-8 0V3ZM8 5H4v3a4 4 0 0 0 4 4M16 5h4v3a4 4 0 0 1-4 4M12 14v6M8 21h8',grid:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',chip:'M5 5h14v14H5zM9 9h6v6H9zM9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3',calendar:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2M8 14h2M14 14h2M8 18h2',swap:'M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4',history:'M3 11a9 9 0 1 1 2.5 7M3 4v7h7M12 7v5l3 2',user:'M20 21a8 8 0 0 0-16 0M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',bell:'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',chevron:'m9 5 7 7-7 7',down:'m6 9 6 6 6-6',plus:'M12 5v14M5 12h14',search:'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',arrow:'M5 12h14m-5-5 5 5-5 5',clock:'M12 8v4l3 2M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',check:'m5 12 4 4L19 6',close:'m6 6 12 12M6 18 18 6',logout:'M9 4H4v16h5M9 12h12m-4-4 4 4-4 4',menu:'M3 6h18M3 12h18M3 18h18',box:'m3 7 9-5 9 5v10l-9 5-9-5V7Zm0 0 9 5 9-5M12 12v10M7 4l10 6',tool:'m14 6 4 4M14 6a6 6 0 0 0-7 7l-5 5 4 4 5-5a6 6 0 0 0 7-7M14 6l4-4 4 4-4 4',wifi:'M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8 16a6 6 0 0 1 8 0M12 20h.01',file:'M14 2H4v20h16V8l-6-6Zm0 0v6h6M8 13h8M8 17h6',refresh:'M20 7a9 9 0 0 0-15-2L2 8m0-6v6h6M4 17a9 9 0 0 0 15 2l3-3m0 6v-6h-6',shield:'m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-4 10 3 3 5-6',leaf:'M20 3C6 1 2 10 8 16s15 2 12-13ZM5 21 15 9',download:'M12 3v12m-5-5 5 5 5-5M3 16v5h18v-5'};
-function icon(name,cls=''){return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATHS[name]||PATHS.chip}"/></svg>`}
-const esc = v => String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const date = (days=0,hour=10) => {const d=new Date();d.setDate(d.getDate()+days);d.setHours(hour,0,0,0);return d.toISOString()};
-const fmt = (v, time=false) => v ? new Date(v).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',...(time?{hour:'2-digit',minute:'2-digit',hour12:false}:{})}) : '—';
-const inputDate = v => {const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
-function seed(){
- const memberData=[['m1','陈明远','teacher','导师组','嵌入式系统架构','空闲','teacher'],['m2','林知远','manager','系统研发组','嵌入式 Linux','空闲','manager'],['m3','张子涵','member','硬件研发组','STM32 / 电路设计','忙碌','member'],['m4','李沐阳','member','物联网组','无线通信 / IoT','空闲','limuyang'],['m5','王雨桐','member','系统研发组','机器人控制','空闲','wangyutong'],['m6','赵一鸣','member','硬件研发组','传感器融合','忙碌','zhaoyiming'],['m7','陈思远','member','物联网组','低功耗通信','空闲','chensiyuan'],['m8','周可欣','member','系统研发组','边缘计算','离线','zhoukexin']];
- const members=memberData.map((m,i)=>({id:m[0],name:m[1],role:m[2],group:m[3],direction:m[4],baseStatus:m[5],username:m[6],number:i<2?`T202600${i+1}`:`202400${i+1}`,contact:`${m[6]}@lab.example`,joined:date(-180-i*8),note:m[5]==='忙碌'?'项目调试中':'',updated:date(-1,17),active:true}));
- const specs=[['STM32F407 开发板','STM32F407ZGT6','开发板','STMicroelectronics','3.3V · UART / SPI / I²C','A-01'],['ESP32 开发板','ESP32-WROOM-32','开发板','Espressif','3.3V · Wi-Fi / BLE','A-02'],['树莓派 4B','Raspberry Pi 4B / 4GB','单板计算机','Raspberry Pi','5V · USB / HDMI / GPIO','A-03'],['DHT22 温湿度传感器','DHT22 / AM2302','传感器','Aosong','3.3–5V · 单总线','B-01'],['MPU6050 六轴传感器','MPU-6050','传感器','TDK InvenSense','3.3V · I²C','B-02'],['LoRa 无线模块','SX1278 / 433MHz','通信模块','Semtech','3.3V · SPI','C-01'],['ST-Link 调试器','ST-Link V2','调试工具','STMicroelectronics','3.3V · SWD / JTAG','D-01'],['SG90 微型舵机','SG90 / 9g','执行器','TowerPro','5V · PWM','E-01'],['Arduino Uno','UNO R3','开发板','Arduino','5V · UART / SPI','A-04'],['USB 转串口模块','CH340G','调试工具','WCH','3.3/5V · UART','D-02'],['超声波测距模块','HC-SR04','传感器','通用','5V · GPIO','B-03'],['蓝牙串口模块','HC-05','通信模块','通用','3.3V · UART','C-02'],['N20 减速电机','N20 / 100RPM','执行器','通用','6V · 直流','E-02']];
- const assets=Array.from({length:18},(_,i)=>{const s=specs[i<13?i:[0,1,4,6,5][i-13]];return {id:`EM-${String(i+1).padStart(3,'0')}`,name:s[0],model:s[1],category:s[2],vendor:s[3],spec:s[4],location:`器材柜 ${s[5]}`,status:i===7||i===10?'维修中':i===12?'已报废':'空闲',created:date(-90-i),note:i===7?'齿轮异常，等待更换':i===10?'测距不稳定，待检修':'',datasheet:''}});
- const loans=[{id:'BR-2026-001',memberId:'m3',assetIds:['EM-001','EM-007'],purpose:'智能小车主控调试',project:'智能巡检小车',status:'使用中',created:date(-3),issued:date(-2),due:date(3),reviewer:'m2',opinion:'同意，用后归还原位'},{id:'BR-2026-002',memberId:'m4',assetIds:['EM-002'],purpose:'环境监测节点联调',project:'智慧实验室',status:'使用中',created:date(-4),issued:date(-3),due:date(5),reviewer:'m2'},{id:'BR-2026-003',memberId:'m6',assetIds:['EM-005'],purpose:'姿态解算测试',project:'两轮自平衡车',status:'使用中',created:date(-8),issued:date(-7),due:date(-1),reviewer:'m2'},{id:'BR-2026-004',memberId:'m8',assetIds:['EM-003'],purpose:'边缘图像推理',project:'视觉识别',status:'待确认归还',created:date(-5),issued:date(-4),due:date(2),reviewer:'m1',returnRequested:date(-1,17)},{id:'BR-2026-005',memberId:'m3',assetIds:['EM-006'],purpose:'无线传输距离测试',project:'智能巡检小车',status:'待审批',created:date(-1,16),due:date(7)},{id:'BR-2026-006',memberId:'m4',assetIds:['EM-004'],purpose:'温湿度采样',project:'智慧实验室',status:'已归还',created:date(-12),issued:date(-11),due:date(-5),returned:date(-6),reviewer:'m2'}];
- const leaves=[{id:'LV-001',memberId:'m5',start:date(-1),end:date(2,18),reason:'个人事务',status:'已通过',created:date(-3),reviewer:'m2',opinion:'同意',reviewed:date(-2)},{id:'LV-002',memberId:'m7',start:date(1),end:date(3,18),reason:'参加校外技术交流',status:'待审批',created:date(-1,15)}];
- return {version:1,competitions:seedCompetitions(),members,assets,loans,leaves,maintenance:[{id:'MT-001',assetId:'EM-008',description:'舵机齿轮异常',status:'维修中',created:date(-2),actor:'m2'}],logs:[{id:'LOG-1',actor:'林知远',text:'确认归还 DHT22 温湿度传感器',at:date(-6),memberId:'m4'},{id:'LOG-2',actor:'陈明远',text:'发放树莓派 4B 给周可欣',at:date(-4),memberId:'m8'},{id:'LOG-3',actor:'张子涵',text:'申请借用 LoRa 无线模块',at:date(-1,17),memberId:'m3'},{id:'LOG-4',actor:'周可欣',text:'提交树莓派 4B 归还申请',at:date(-1,17),memberId:'m8'}]};
-}
-let db, sessionId = null, view='dashboard', search='', filter='', groupFilter='', page=1;
-const PAGE_SIZE=8;
-const NAV=[['dashboard','grid','工作台'],['members','users','成员管理'],['leaves','calendar','请假管理'],['assets','chip','模块管理'],['loans','swap','借用与归还'],['competitions','trophy','比赛管理'],['logs','history','操作记录'],['profile','user','个人中心']];
-const API={
- async request(path,options={}){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),CONFIG.timeout);try{const r=await fetch(CONFIG.API_BASE_URL+path,{...options,credentials:'include',headers:{'Content-Type':'application/json',...options.headers},signal:controller.signal});const data=await r.json().catch(()=>null);if(!r.ok){const err=new Error(data?.message||`请求失败（${r.status}）`);err.status=r.status;throw err;}if(data===null)throw new Error('接口未返回有效 JSON 数据');return data.data??data}catch(e){if(e.name==='AbortError')throw new Error('请求超时，请检查服务器连接');throw e}finally{clearTimeout(timer)}},
- async load(){if(CONFIG.mode==='api'){let current;try{current=await this.request('/auth/me')}catch(e){if(e.status===401){sessionId=null;db=null;return}throw e}db=await this.request('/workspace');sessionId=current.id;return}const raw=localStorage.getItem(DB_KEY);db=raw?JSON.parse(raw):seed();if(!raw)localStorage.setItem(DB_KEY,JSON.stringify(db));if(db.version!==1||!Array.isArray(db.members)||!Array.isArray(db.assets)||!Array.isArray(db.loans)||!Array.isArray(db.leaves)||!Array.isArray(db.logs)||!Array.isArray(db.maintenance))throw new Error('演示数据格式无效，请恢复演示数据');if(!Array.isArray(db.competitions)){db.competitions=seedCompetitions();localStorage.setItem(DB_KEY,JSON.stringify(db))}sessionId=sessionStorage.getItem(SESSION_KEY);},
- async login(username,password){if(CONFIG.mode==='api'){const result=await this.request('/auth/login',{method:'POST',body:JSON.stringify({username,password})});sessionId=result.id;await this.load();return}const m=db.members.find(x=>x.username===username&&x.active);const credential=m&&db.credentials?.[m.id];const valid=!!m&&(credential?await verifyCredential(password,credential):password==='Lab@123456');if(!valid)throw new Error('账号或密码不正确，或账号已停用');sessionStorage.setItem(SESSION_KEY,m.id);sessionId=m.id;},
- async mutate(path,payload,localAction){if(CONFIG.mode==='api'){await this.request(path,{method:'POST',body:JSON.stringify(payload)});await this.load();return}const backup=JSON.stringify(db);try{localAction();localStorage.setItem(DB_KEY,JSON.stringify(db))}catch(e){db=JSON.parse(backup);throw e}},
- async logout(){if(CONFIG.mode==='api')await this.request('/auth/logout',{method:'POST'});sessionStorage.removeItem(SESSION_KEY);sessionId=null;}
+const pages = {
+  dashboard,
+  competitions: competitionsPage,
+  members: membersPage,
+  assets: assetsPage,
+  loans: loansPage,
+  leaves: leavesPage,
+  logs: logsPage,
+  profile: profilePage,
 };
-function me(){return db?.members.find(m=>m.id===sessionId&&m.active)}
-function can(permission){return !!PERMISSIONS[me()?.role]?.[permission]}
-function member(id){return db.members.find(x=>x.id===id)}
-function asset(id){return db.assets.find(x=>x.id===id)}
-function activeLoan(id){return db.loans.find(l=>['使用中','待确认归还'].includes(l.status)&&l.assetIds.includes(id))}
-function assetStatus(a){return activeLoan(a.id)?'使用中':a.status}
-function memberStatus(m){return db.leaves.some(l=>l.memberId===m.id&&l.status==='已通过'&&Date.parse(l.start)<=Date.now()&&Date.parse(l.end)>=Date.now())?'请假':m.baseStatus}
-function overdue(l){return ['使用中','待确认归还'].includes(l.status)&&Date.parse(l.due)<Date.now()}
-function badge(s){const colors={'空闲':'green','使用中':'blue','忙碌':'blue','请假':'orange','离线':'','维修中':'orange','已报废':'','待审批':'orange','已通过':'green','待发放':'purple','待确认归还':'purple','已归还':'green','已拒绝':'red','已撤销':'','逾期':'red','已完成':'green','已停用':''};return `<span class="badge ${colors[s]||''}">${esc(s)}</span>`}
-function avatar(m){return `<span class="avatar a${Math.max(0,db.members.indexOf(m))%5}">${esc(m?.name?.slice(-2)||'未知')}</span>`}
-function assetIcon(a){return `<span class="hardware-icon ${a.category==='通信模块'?'comm':a.category==='传感器'?'sensor':''}">${icon(a.category==='通信模块'?'wifi':a.category==='调试工具'?'tool':'chip')}</span>`}
-function btn(text,action,cls='',extra=''){return `<button type="button" class="btn ${cls}" data-action="${action}" ${extra}>${text}</button>`}
-function empty(title='暂无记录',description='调整筛选条件，或新增一条记录。'){return `<div class="empty">${icon('box')}<strong>${title}</strong>${description}</div>`}
-function toast(message,error=false){const el=document.createElement('div');el.className='toast'+(error?' error':'');el.textContent=message;document.querySelector('#toasts').append(el);setTimeout(()=>el.remove(),4000)}
-function audit(text,memberId=me().id){db.logs.push({id:uid('LOG'),actor:me().name,text,memberId,at:new Date().toISOString()})}
-function uid(prefix){return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`}
-function go(next){if(!NAV.some(n=>n[0]===next))return;view=next;history.replaceState(null,'','#'+next);search='';filter='';groupFilter='';page=1;render();window.scrollTo(0,0)}
-function pendingCount(){return db.loans.filter(l=>canReview(l)&&['待审批','待发放','待确认归还'].includes(l.status)).length+db.leaves.filter(l=>l.status==='待审批'&&canReview(l)).length}
-function canReview(r){const user=me(),owner=member(r.memberId);return !!user&&can('approve')&&user.id!==r.memberId&&(user.role==='teacher'||owner?.role==='member')}
-function loginPage(){return `<div class="login"><section class="login-art"><div class="brand"><div class="brandmark">${icon('chip')}</div><div><strong>芯栈 <span style="font-weight:400">Lab</span></strong><small>EMBEDDED SYSTEMS LAB</small></div></div><div class="login-copy"><div class="eyebrow">让每一次探索，有序发生</div><h1>专注创造，<br>让实验室井然有序。</h1><p>连接实验室的每一位成员、每一件设备。<br>从灵感到实践，让协作更进一步。</p></div><div class="circuit"><div class="chip">${icon('chip')}</div><div class="floating-tag one"><span class="dot"></span> &nbsp;成员协同 · 实时状态</div><div class="floating-tag two">${icon('box')} &nbsp;硬件资产 · 有迹可循</div></div><div class="login-art-footer">芯栈 LAB &nbsp; / &nbsp; 嵌入式实验室管理系统</div></section><section class="login-form-wrap"><form class="login-form" id="login-form"><div class="eyebrow">WELCOME BACK</div><h1>欢迎回到实验室</h1><p>登录你的账号，开始今天的探索。</p><div class="field"><label for="username">账号</label><input id="username" name="username" autocomplete="username" placeholder="请输入账号" required value="${CONFIG.mode==='mock'?'teacher':''}"></div><div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required value="${CONFIG.mode==='mock'?'Lab@123456':''}"></div><div class="row between small muted" style="margin-bottom:20px"><span>${icon('shield')} &nbsp;实验室统一工作台</span><span>${CONFIG.mode==='mock'?'本地演示版':'云端登录'}</span></div><button class="btn primary" type="submit">登录工作台 ${icon('arrow')}</button><div class="form-error" id="login-error" role="alert"></div>${CONFIG.mode==='mock'?`<div class="test-accounts"><p>选择测试身份，自动填入账号</p><div class="account-buttons"><button type="button" data-action="fill-account" data-value="teacher">指导老师</button><button type="button" data-action="fill-account" data-value="manager">负责人</button><button type="button" data-action="fill-account" data-value="member">普通成员</button></div><small>初始测试账号密码：<span class="mono">Lab@123456</span></small></div><p class="login-caption">当前为前端演示，数据仅保存在此浏览器。<br>新成员请使用管理员创建的账号和密码。<br>阿里云后端尚未连接。</p>`:''}</form></section></div>`}
-function shell(){const u=me();return `<div class="overlay" data-action="close-menu"></div><aside class="sidebar" id="main-sidebar"><div class="brand"><div class="brandmark">${icon('chip')}</div><div><strong>芯栈 <span style="font-weight:400">Lab</span></strong><small>实验室管理系统</small></div></div><div class="nav-label">WORKSPACE · 工作空间</div><nav class="nav" aria-label="主导航">${NAV.map(([id,ico,title])=>`<button class="${view===id?'active':''}" data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${icon(ico)}<span>${title}</span>${id==='loans'&&pendingCount()?`<span class="count">${pendingCount()}</span>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="lab-card"><div class="row" style="gap:8px;color:#596e91">${icon('chip')}<strong>嵌入式创新实验室</strong></div><p>让设备物尽其用，让协作有迹可循。</p><div class="row" style="margin-top:12px;font-size:10px;color:#7c9b90"><span class="dot"></span>${CONFIG.mode==='mock'?'本地演示空间':'云端工作空间'}</div></div><div class="sidebar-footer"><span>芯栈 Lab © 2026</span><span>v1.0</span></div></div></aside><main class="main"><header class="topbar"><div class="row"><button class="icon-btn mobile-menu" data-action="menu" aria-label="打开导航" aria-controls="main-sidebar" aria-expanded="false">${icon('menu')}</button><div class="breadcrumb"><span class="home-label">实验室管理</span><span class="home-label">/</span><span>${NAV.find(n=>n[0]===view)?.[2]}</span></div></div><div class="top-actions"><span class="mode"><span class="dot"></span>${CONFIG.mode==='mock'?'本地演示 · 数据已保存于浏览器':'API 模式'}</span><button class="icon-btn" data-action="notifications" aria-label="查看待办通知">${icon('bell')}${pendingCount()?'<i class="notification-dot"></i>':''}</button><span class="divider"></span><button class="row" data-action="nav" data-view="profile" style="gap:10px" aria-label="打开个人中心">${avatar(u)}<span class="profile-name">${esc(u.name)}<small>${ROLE[u.role]}</small></span>${icon('down')}</button><button class="icon-btn" data-action="logout" aria-label="退出登录" title="退出登录">${icon('logout')}</button></div></header><div class="content" id="content">${renderView()}</div></main>`}
-function heading(title,subtitle,buttons='',eyebrow=''){return `<div class="page-heading"><div>${eyebrow?`<div class="eyebrow">${eyebrow}</div>`:''}<h1>${title}</h1><p>${subtitle}</p></div><div class="controls-wrap">${buttons}</div></div>`}
-function statsCard(title,value,unit,ico,color,foot){return `<div class="stat"><div class="stat-top"><span>${title}</span><span class="stat-icon ${color}">${icon(ico)}</span></div><div class="stat-value">${value}<small>${unit}</small></div><div class="stat-foot">${foot}</div></div>`}
-function memberCard(m){return `<button class="member-card" data-action="member-detail" data-id="${m.id}"><div class="row" style="gap:9px">${avatar(m)}<div><strong>${esc(m.name)}</strong><small>${ROLE[m.role]}</small></div></div><div class="member-card-bottom">${badge(memberStatus(m))}<span>${esc(m.group)}</span></div></button>`}
-function dashboard(){const people=db.members.filter(m=>m.active),available=db.assets.filter(a=>assetStatus(a)==='空闲').length,using=db.assets.filter(a=>assetStatus(a)==='使用中').length,repair=db.assets.filter(a=>assetStatus(a)==='维修中').length,retired=db.assets.filter(a=>assetStatus(a)==='已报废').length,total=db.assets.length,free=people.filter(m=>memberStatus(m)==='空闲').length,busy=people.filter(m=>memberStatus(m)==='忙碌').length,leave=people.filter(m=>memberStatus(m)==='请假').length,offline=people.filter(m=>memberStatus(m)==='离线').length,late=db.loans.filter(overdue).length;const usage=Math.round(using/(total-retired||1)*100);const today=new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric',weekday:'long'});const active=db.loans.filter(l=>['使用中','待确认归还'].includes(l.status));return `${heading(`你好，${esc(me().name)} <span style="font-size:22px">☀️</span>`,`今天是 ${today}，一起让实验室高效运转。`,btn(`${icon('calendar')} 申请请假`,'leave-new')+btn(`${icon('plus')} 借用模块`,'loan-new','primary'),'LAB OVERVIEW / 实验室概览')}<div class="stats">${statsCard('实验室成员',people.length,'人','users','',`<span class="mini-tag">${free} 人空闲</span><span>${busy} 忙碌 · ${leave} 请假 · ${offline} 离线</span>`)}${statsCard('硬件模块',total,'件','chip','purple',`<span>${new Set(db.assets.map(a=>a.category)).size} 个分类</span><span>·</span><span>${new Set(db.assets.map(a=>a.model)).size} 种型号</span>`)}${statsCard('可用模块',available,'件','box','green',`<span class="mini-tag">随时可借用</span><span>${using} 件使用中</span>`)}${statsCard('待处理事项',can('approve')?pendingCount():db.loans.filter(l=>l.memberId===me().id&&l.status==='待审批').length,'项','clock','orange',`<span style="color:${late?'#cf8a43':'#8992a4'}">${late} 笔借用已逾期</span><span>·</span><span>${repair} 件维修中</span>`)}</div><div class="grid-main"><div><section class="panel"><div class="panel-head"><h2>成员状态 <span>${people.length} 位成员</span></h2><div class="legend"><span><i style="background:#26a078"></i>空闲</span><span><i style="background:#547ce2"></i>忙碌</span><span><i style="background:#d29740"></i>请假</span></div></div><div class="member-grid">${people.slice(0,6).map(memberCard).join('')}</div><div class="panel-foot"><span><span class="dot" style="width:4px;height:4px"></span> &nbsp;状态根据当前记录计算 · 在线情况为模拟</span><button class="text-btn" data-action="nav" data-view="members">查看全部成员 ${icon('arrow')}</button></div></section><section class="panel"><div class="panel-head"><div><h2>正在使用的模块</h2><p>追踪设备去向，让每一件硬件都有记录</p></div><button class="text-btn" data-action="nav" data-view="loans">全部记录 ${icon('chevron')}</button></div><div class="table-wrap"><table><thead><tr><th>模块 / 型号</th><th>使用者</th><th>预计归还</th><th>状态</th></tr></thead><tbody>${active.flatMap(l=>l.assetIds.map(id=>{const a=asset(id);return `<tr><td><button class="row" style="text-align:left;padding:0" data-action="asset-detail" data-id="${a.id}">${assetIcon(a)}<span><strong>${esc(a.name)}</strong><small class="mono">${esc(a.id)}</small></span></button></td><td>${esc(member(l.memberId)?.name)}</td><td style="color:${overdue(l)?'#d28370':'inherit'}">${fmt(l.due)}</td><td>${badge(overdue(l)?'逾期':l.status)}</td></tr>`})).slice(0,5).join('')}</tbody></table>${!active.length?empty('暂无借出模块','当前所有可用设备均已归还。'):''}</div></section></div><div class="grid-side"><section class="panel"><div class="panel-head"><h2>模块使用概况</h2><span class="small muted">共 ${total} 件</span></div><div class="utilization"><div class="donut" style="background:conic-gradient(#6487ec 0 ${using/total*100}%,#69bba3 ${using/total*100}% ${(using+available)/total*100}%,#e8bf79 ${(using+available)/total*100}% ${(using+available+repair)/total*100}%,#e7ebf3 0)"><div class="donut-label"><strong>${usage}<span style="display:inline;font-size:17px;color:#324057">%</span></strong><span>在册资产使用率</span></div></div><div class="chart-legend">${[['使用中',using,'#6487ec'],['空闲',available,'#69bba3'],['维修中',repair,'#e8bf79'],['已报废',retired,'#dfe5ef']].map(([s,n,c])=>`<div><i style="background:${c}"></i>${s}<b>${n}</b></div>`).join('')}</div></div><div class="usage-bottom"><span>设备可借用率（含全部资产）</span><strong>${Math.round(available/total*100)}% 可借用 ${icon('check')}</strong></div></section><section class="panel"><div class="panel-head"><h2>${can('approve')?'待办提醒':'我的提醒'} <span>${todoItems().length}</span></h2><button class="text-btn" data-action="notifications">查看全部</button></div><div class="todo-list">${todoItems().slice(0,3).map(t=>`<div class="todo"><span class="todo-icon ${t.orange?'orange':''}">${icon(t.icon)}</span><div><strong>${esc(t.title)}</strong><small>${esc(t.description)}</small></div><button class="arrow" data-action="nav" data-view="${t.view}" aria-label="查看${esc(t.title)}">${icon('chevron')}</button></div>`).join('')||empty('暂无待办','可以专注于你的实验了。')}</div></section><section class="panel"><div class="panel-head"><h2>最近动态</h2><span class="small muted">实验室足迹</span></div><div class="activity">${visibleLogs().slice(0,3).map(l=>`<div class="activity-item">${esc(l.actor)} · ${esc(l.text)}<small>${fmt(l.at,true)}</small></div>`).join('')||'<span class="small muted">暂无动态</span>'}</div></section></div></div>${competitionOverview()}<footer class="page-footer"><span>© 2026 芯栈 Lab · 嵌入式创新实验室</span><span><span class="dot"></span>本地演示数据 &nbsp; / &nbsp; 最后刷新 ${new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})}</span></footer>`}
-function visibleLogs(){return db.logs.filter(l=>me().role!=='member'||l.memberId===me().id||!l.private).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at))}
-function todoItems(){const tasks=[];for(const l of db.loans){if(canReview(l)&&['待审批','待发放','待确认归还'].includes(l.status))tasks.push({title:`${member(l.memberId)?.name} · ${l.status==='待审批'?'模块借用申请':l.status}`,description:l.assetIds.map(id=>asset(id)?.name).join('、'),icon:'swap',view:'loans'});if(overdue(l)&&(can('approve')||l.memberId===me().id))tasks.push({title:'模块借用已逾期',description:`${member(l.memberId)?.name} · ${fmt(l.due)} 应归还`,icon:'clock',view:'loans',orange:true})}for(const l of db.leaves)if(l.status==='待审批'&&canReview(l))tasks.push({title:`${member(l.memberId)?.name} · 请假申请`,description:`${fmt(l.start)} — ${fmt(l.end)}`,icon:'calendar',view:'leaves',orange:true});return tasks}
-function renderView(){return view==='dashboard'?dashboard():typeof pages!=='undefined'&&pages[view]?pages[view]():empty('页面加载中','正在完善实验室管理功能。')}
-function render(){const root=document.querySelector('#app');root.innerHTML=me()?shell():loginPage();syncNavigationAccessibility()}
-// FEATURES
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b)return;try{await action(b.dataset.action,b)}catch(err){toast(err.message,true)}});
-document.addEventListener('submit',async e=>{if(e.target.id!=='login-form')return;e.preventDefault();const button=e.target.querySelector('button[type=submit]');button.disabled=true;button.textContent='正在登录…';try{const f=new FormData(e.target);await API.login(f.get('username').trim(),f.get('password'));go('dashboard')}catch(err){document.querySelector('#login-error').textContent=err.message;button.disabled=false;button.innerHTML=`登录工作台 ${icon('arrow')}`}});
-async function action(type,b){if(type==='fill-account'){document.querySelector('#username').value=b.dataset.value;document.querySelector('#password').value='Lab@123456';return}if(type==='nav'){go(b.dataset.view);return}if(type==='logout'){await API.logout();render();return}if(type==='menu'){setMobileMenu(true);return}if(type==='close-menu'){setMobileMenu(false);return}if(typeof handleAction==='function')return handleAction(type,b);toast('该功能正在准备中')}
-async function init(){try{await API.load();const route=location.hash.slice(1);if(NAV.some(n=>n[0]===route))view=route;render()}catch(e){document.querySelector('#app').innerHTML=`<div class="loading"><h2>暂时无法读取数据</h2><p style="margin:15px">${esc(e.message)}</p>${btn('重试','reload')}${CONFIG.mode==='mock'?btn('恢复演示数据','reset'):''}</div>`}}
-window.addEventListener('hashchange',()=>{const route=location.hash.slice(1);if(NAV.some(n=>n[0]===route))go(route)});
-init();
+function go(next) {
+  if (!NAV.some((n) => n[0] === next)) return;
+  view = next;
+  history.replaceState(null, '', '#' + next);
+  search = '';
+  filter = '';
+  groupFilter = '';
+  page = 1;
+  render();
+  window.scrollTo(0, 0);
+}
+function loginPage() {
+  return `<div class="login"><section class="login-art"><div class="brand"><div class="brandmark">${icon('chip')}</div><div><strong>芯栈 <span style="font-weight:400">Lab</span></strong><small>EMBEDDED SYSTEMS LAB</small></div></div><div class="login-copy"><div class="eyebrow">让每一次探索，有序发生</div><h1>专注创造，<br>让实验室井然有序。</h1><p>连接实验室的每一位成员、每一件设备。<br>从灵感到实践，让协作更进一步。</p></div><div class="circuit"><div class="chip">${icon('chip')}</div><div class="floating-tag one"><span class="dot"></span> &nbsp;成员协同 · 实时状态</div><div class="floating-tag two">${icon('box')} &nbsp;硬件资产 · 有迹可循</div></div><div class="login-art-footer">芯栈 LAB &nbsp; / &nbsp; 嵌入式实验室管理系统</div></section><section class="login-form-wrap"><form class="login-form" id="login-form"><div class="eyebrow">WELCOME BACK</div><h1>欢迎回到实验室</h1><p>登录你的账号，开始今天的探索。</p><div class="field"><label for="username">账号</label><input id="username" name="username" autocomplete="username" placeholder="请输入账号" required value="${CONFIG.mode === 'mock' ? 'teacher' : ''}"></div><div class="field"><label for="password">密码</label><input id="password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required value="${CONFIG.mode === 'mock' ? 'Lab@123456' : ''}"></div><div class="row between small muted" style="margin-bottom:20px"><span>${icon('shield')} &nbsp;实验室统一工作台</span><span>${CONFIG.mode === 'mock' ? '本地演示版' : '云端登录'}</span></div><button class="btn primary" type="submit">登录工作台 ${icon('arrow')}</button><div class="form-error" id="login-error" role="alert"></div>${CONFIG.mode === 'mock' ? `<div class="test-accounts"><p>选择测试身份，自动填入账号</p><div class="account-buttons"><button type="button" data-action="fill-account" data-value="teacher">指导老师</button><button type="button" data-action="fill-account" data-value="manager">负责人</button><button type="button" data-action="fill-account" data-value="member">普通成员</button></div><small>初始测试账号密码：<span class="mono">Lab@123456</span></small></div><p class="login-caption">当前为前端演示，数据仅保存在此浏览器。<br>新成员请使用管理员创建的账号和密码。<br>阿里云后端尚未连接。</p>` : ''}</form></section></div>`;
+}
+function shell() {
+  const u = me(),
+    pending = pendingCount();
+  return `<div class="overlay" data-action="close-menu"></div><aside class="sidebar" id="main-sidebar"><div class="brand"><div class="brandmark">${icon('chip')}</div><div><strong>芯栈 <span style="font-weight:400">Lab</span></strong><small>实验室管理系统</small></div></div><div class="nav-label">WORKSPACE · 工作空间</div><nav class="nav" aria-label="主导航">${NAV.map(([id, ico, title]) => `<button class="${view === id ? 'active' : ''}" data-action="nav" data-view="${id}" ${view === id ? 'aria-current="page"' : ''}>${icon(ico)}<span>${title}</span>${id === 'loans' && pending ? `<span class="count">${pending}</span>` : ''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="lab-card"><div class="row" style="gap:8px;color:#596e91">${icon('chip')}<strong>嵌入式创新实验室</strong></div><p>让设备物尽其用，让协作有迹可循。</p><div class="row" style="margin-top:12px;font-size:10px;color:#7c9b90"><span class="dot"></span>${CONFIG.mode === 'mock' ? '本地演示空间' : '云端工作空间'}</div></div><div class="sidebar-footer"><span>芯栈 Lab © 2026</span><span>v1.0</span></div></div></aside><main class="main"><header class="topbar"><div class="row"><button class="icon-btn mobile-menu" data-action="menu" aria-label="打开导航" aria-controls="main-sidebar" aria-expanded="false">${icon('menu')}</button><div class="breadcrumb"><span class="home-label">实验室管理</span><span class="home-label">/</span><span>${NAV.find((n) => n[0] === view)?.[2]}</span></div></div><div class="top-actions"><span class="mode"><span class="dot"></span>${CONFIG.mode === 'mock' ? '本地演示 · 数据已保存于浏览器' : 'API 模式'}</span><button class="icon-btn" data-action="notifications" aria-label="查看待办通知">${icon('bell')}${pending ? '<i class="notification-dot"></i>' : ''}</button><span class="divider"></span><button class="row" data-action="nav" data-view="profile" style="gap:10px" aria-label="打开个人中心">${avatar(u)}<span class="profile-name">${esc(u.name)}<small>${ROLE[u.role]}</small></span>${icon('down')}</button><button class="icon-btn" data-action="logout" aria-label="退出登录" title="退出登录">${icon('logout')}</button></div></header><div class="content" id="content">${renderView()}</div></main>`;
+}
+function dashboard() {
+  const people = db.members.filter((m) => m.active),
+    assets = countStatuses(db.assets, assetStatus),
+    members = countStatuses(people, memberStatus);
+  const available = assets['空闲'] || 0,
+    using = assets['使用中'] || 0,
+    repair = assets['维修中'] || 0,
+    retired = assets['已报废'] || 0,
+    total = db.assets.length;
+  const free = members['空闲'] || 0,
+    busy = members['忙碌'] || 0,
+    leave = members['请假'] || 0,
+    offline = members['离线'] || 0,
+    late = db.loans.filter(overdue).length;
+  const usage = Math.round(percentage(using, total - retired)),
+    todos = todoItems();
+  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  const active = db.loans.filter(isActiveLoan);
+  return `${heading(`你好，${esc(me().name)} <span style="font-size:22px">☀️</span>`, `今天是 ${today}，一起让实验室高效运转。`, btn(`${icon('calendar')} 申请请假`, 'leave-new') + btn(`${icon('plus')} 借用模块`, 'loan-new', 'primary'), 'LAB OVERVIEW / 实验室概览')}<div class="stats">${statsCard('实验室成员', people.length, '人', 'users', '', `<span class="mini-tag">${free} 人空闲</span><span>${busy} 忙碌 · ${leave} 请假 · ${offline} 离线</span>`)}${statsCard('硬件模块', total, '件', 'chip', 'purple', `<span>${new Set(db.assets.map((a) => a.category)).size} 个分类</span><span>·</span><span>${new Set(db.assets.map((a) => a.model)).size} 种型号</span>`)}${statsCard('可用模块', available, '件', 'box', 'green', `<span class="mini-tag">随时可借用</span><span>${using} 件使用中</span>`)}${statsCard('待处理事项', can('approve') ? pendingCount() : db.loans.filter((l) => l.memberId === me().id && l.status === '待审批').length, '项', 'clock', 'orange', `<span style="color:${late ? '#cf8a43' : '#8992a4'}">${late} 笔借用已逾期</span><span>·</span><span>${repair} 件维修中</span>`)}</div><div class="grid-main"><div><section class="panel"><div class="panel-head"><h2>成员状态 <span>${people.length} 位成员</span></h2><div class="legend"><span><i style="background:#26a078"></i>空闲</span><span><i style="background:#547ce2"></i>忙碌</span><span><i style="background:#d29740"></i>请假</span></div></div><div class="member-grid">${people.slice(0, 6).map(memberCard).join('')}</div><div class="panel-foot"><span><span class="dot" style="width:4px;height:4px"></span> &nbsp;状态根据当前记录计算 · 在线情况为模拟</span><button class="text-btn" data-action="nav" data-view="members">查看全部成员 ${icon('arrow')}</button></div></section><section class="panel"><div class="panel-head"><div><h2>正在使用的模块</h2><p>追踪设备去向，让每一件硬件都有记录</p></div><button class="text-btn" data-action="nav" data-view="loans">全部记录 ${icon('chevron')}</button></div><div class="table-wrap"><table><thead><tr><th>模块 / 型号</th><th>使用者</th><th>预计归还</th><th>状态</th></tr></thead><tbody>${active
+    .flatMap((l) =>
+      l.assetIds.map((id) => {
+        const a = asset(id);
+        return `<tr><td><button class="row" style="text-align:left;padding:0" data-action="asset-detail" data-id="${a.id}">${assetIcon(a)}<span><strong>${esc(a.name)}</strong><small class="mono">${esc(a.id)}</small></span></button></td><td>${esc(member(l.memberId)?.name)}</td><td style="color:${overdue(l) ? '#d28370' : 'inherit'}">${fmt(l.due)}</td><td>${badge(overdue(l) ? '逾期' : l.status)}</td></tr>`;
+      }),
+    )
+    .slice(0, 5)
+    .join(
+      '',
+    )}</tbody></table>${!active.length ? empty('暂无借出模块', '当前所有可用设备均已归还。') : ''}</div></section></div><div class="grid-side"><section class="panel"><div class="panel-head"><h2>模块使用概况</h2><span class="small muted">共 ${total} 件</span></div><div class="utilization"><div class="donut" style="background:conic-gradient(#6487ec 0 ${percentage(using, total)}%,#69bba3 ${percentage(using, total)}% ${percentage(using + available, total)}%,#e8bf79 ${percentage(using + available, total)}% ${percentage(using + available + repair, total)}%,#e7ebf3 0)"><div class="donut-label"><strong>${usage}<span style="display:inline;font-size:17px;color:#324057">%</span></strong><span>在册资产使用率</span></div></div><div class="chart-legend">${[
+    ['使用中', using, '#6487ec'],
+    ['空闲', available, '#69bba3'],
+    ['维修中', repair, '#e8bf79'],
+    ['已报废', retired, '#dfe5ef'],
+  ]
+    .map(([s, n, c]) => `<div><i style="background:${c}"></i>${s}<b>${n}</b></div>`)
+    .join(
+      '',
+    )}</div></div><div class="usage-bottom"><span>设备可借用率（含全部资产）</span><strong>${Math.round(percentage(available, total))}% 可借用 ${icon('check')}</strong></div></section><section class="panel"><div class="panel-head"><h2>${can('approve') ? '待办提醒' : '我的提醒'} <span>${todos.length}</span></h2><button class="text-btn" data-action="notifications">查看全部</button></div><div class="todo-list">${
+    todos
+      .slice(0, 3)
+      .map(
+        (t) =>
+          `<div class="todo"><span class="todo-icon ${t.orange ? 'orange' : ''}">${icon(t.icon)}</span><div>${stack(t.title, t.description)}</div><button class="arrow" data-action="nav" data-view="${t.view}" aria-label="查看${esc(t.title)}">${icon('chevron')}</button></div>`,
+      )
+      .join('') || empty('暂无待办', '可以专注于你的实验了。')
+  }</div></section><section class="panel"><div class="panel-head"><h2>最近动态</h2><span class="small muted">实验室足迹</span></div><div class="activity">${
+    visibleLogs()
+      .slice(0, 3)
+      .map((l) => `<div class="activity-item">${esc(l.actor)} · ${esc(l.text)}<small>${fmt(l.at, true)}</small></div>`)
+      .join('') || '<span class="small muted">暂无动态</span>'
+  }</div></section></div></div>${competitionOverview()}<footer class="page-footer"><span>© 2026 芯栈 Lab · 嵌入式创新实验室</span><span><span class="dot"></span>本地演示数据 &nbsp; / &nbsp; 最后刷新 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span></footer>`;
+}
+function renderView() {
+  return Object.hasOwn(pages, view) ? pages[view]() : empty('页面不存在', '请从导航选择页面。');
+}
+function render() {
+  const root = document.querySelector('#app');
+  root.innerHTML = me() ? shell() : loginPage();
+  syncNavigationAccessibility();
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-action]');
+  if (!b) return;
+  try {
+    await action(b.dataset.action, b);
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+document.addEventListener('submit', async (e) => {
+  const login = e.target.id === 'login-form';
+  if (!login && (e.target.id !== 'modal-form' || !modalSubmit)) return;
+  e.preventDefault();
+  const button = e.target.querySelector('button[type=submit]'),
+    label = button.innerHTML;
+  button.disabled = true;
+  button.textContent = login ? '正在登录…' : '正在保存…';
+  try {
+    const form = new FormData(e.target);
+    if (login) {
+      await API.login(form.get('username').trim(), form.get('password'));
+      go('dashboard');
+    } else await modalSubmit(form);
+  } catch (err) {
+    document.querySelector(login ? '#login-error' : '#modal-error').textContent = err.message;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = label;
+  }
+});
+async function action(type, b) {
+  if (type === 'fill-account') {
+    document.querySelector('#username').value = b.dataset.value;
+    document.querySelector('#password').value = 'Lab@123456';
+    return;
+  }
+  if (type === 'nav') {
+    go(b.dataset.view);
+    return;
+  }
+  if (type === 'logout') {
+    await API.logout();
+    render();
+    return;
+  }
+  if (type === 'menu') {
+    setMobileMenu(true);
+    return;
+  }
+  if (type === 'close-menu') {
+    setMobileMenu(false);
+    return;
+  }
+  return handleAction(type, b);
+}
+async function init() {
+  try {
+    await API.load();
+    const route = location.hash.slice(1);
+    if (NAV.some((n) => n[0] === route)) view = route;
+    render();
+  } catch (e) {
+    document.querySelector('#app').innerHTML =
+      `<div class="loading"><h2>暂时无法读取数据</h2><p style="margin:15px">${esc(e.message)}</p>${btn('重试', 'reload')}${CONFIG.mode === 'mock' ? btn('恢复演示数据', 'reset') : ''}</div>`;
+  }
+}
+window.addEventListener('hashchange', () => {
+  const route = location.hash.slice(1);
+  if (NAV.some((n) => n[0] === route)) go(route);
+});
+
+document.addEventListener('DOMContentLoaded', init, { once: true });

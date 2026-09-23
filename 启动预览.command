@@ -1,6 +1,6 @@
 #!/bin/zsh
 cd -- "${0:A:h}" || exit 1
-if curl --silent --fail http://127.0.0.1:4173/ | head -c 100000 | rg -q '芯栈 Lab'; then
+if curl --silent --fail --max-time 2 http://127.0.0.1:4173/ | grep -q '芯栈 Lab'; then
   print '预览已在运行：http://127.0.0.1:4173'
   exit 0
 fi

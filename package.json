@@ -1,0 +1,14 @@
+{
+  "name": "xinzhan-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "无运行时依赖的嵌入式实验室管理前端",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm test",
+    "start": "python3 -m http.server 4173 --bind 127.0.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

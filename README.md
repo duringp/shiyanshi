@@ -1,11 +1,11 @@
 # 芯栈 Lab · 嵌入式实验室管理系统
 
-这是可运行的 HTML 前端演示，所有项目文件均位于 `/Users/du/Documents/project/guanlixitong`。无需安装依赖，未连接阿里云后端。
+这是可运行的 HTML 前端演示，所有项目文件均位于 `/Users/du/Documents/project/guanlixitong`。无需安装依赖，未连接阿里云后端。开发与测试使用 Node.js 20+，本地预览使用 Python 3。
 
 ## 打开页面
 
 - 正在运行的本地预览：http://127.0.0.1:4173
-- 或者直接用浏览器打开本目录下 `index.html`，HTML 已内嵌全部样式和脚本，无 CDN、网络字体或外部图片依赖。
+- 或者直接用浏览器打开本目录下 `index.html`，页面直接引用 `src/` 内的样式和脚本，无 CDN、网络字体或外部图片依赖。复制或部署时需同时保留 `index.html` 和 `src/` 文件夹。
 - 推荐固定使用上述 HTTP 地址测试。直接打开文件、换端口或将 127.0.0.1 改为 localhost，都属于不同存储环境，演示数据不会自动共享。
 
 如果预览服务停止，在终端执行：
@@ -80,15 +80,15 @@ python3 -m http.server 4173 --bind 127.0.0.1
 ## 项目文件
 
 ```text
-index.html                 可直接打开的自包含前端
-src/page.html              页面外壳
+index.html                 页面入口，直接引用本地样式和脚本
 src/styles.css             全部响应式样式
-src/app.js                 演示数据、API 层、工作台和登录
-src/features.js            各功能页、表单、权限与状态迁移
+src/core.js                配置、工具、API、快照同步与公共业务规则
+src/seed.js                初始演示数据（包含比赛）
+src/ui.js                  表格、表单、弹窗、搜索与手机导航
+src/app.js                 工作台、登录、导航与页面初始化
+src/features.js            成员账号、模块、借用、请假页面及操作
 src/competitions.js        比赛管理、流程节点及参赛须知
-src/accounts.js            账号创建、密码校验与本地密码派生
-src/ux.js                  中文搜索、手机导航和状态快捷筛选
-build.mjs                  将源文件合并为 index.html（仅使用 Node 内置模块）
+package.json               测试、校验和启动命令，无依赖包
 启动预览.command           macOS 本地预览启动脚本
 API.md                     阿里云后端对接契约
 TEST-REPORT.md             验证记录与已知范围
@@ -96,12 +96,19 @@ TEST-REPORT.md             验证记录与已知范围
 tests/core.test.mjs         核心业务规则测试
 ```
 
-修改源文件后执行 `node build.mjs` 重新生成 `index.html`，再刷新页面。无需 npm install。
+直接维护 `index.html` 和 `src/`，不再生成重复的内嵌脚本副本，也不需要打包。四类管理列表共用表格组件，按钮、表单字段和确认操作共用实现。
 
-运行测试：`node --test tests/core.test.mjs`。
+```sh
+npm run check   # 运行全部自动化测试
+npm start       # 启动 4173 端口预览（端口需空闲）
+```
+
+无需 `npm install`。也可直接运行 `node --test tests/core.test.mjs`。修改源码后刷新页面即可。
+
+数据加载、跨标签页同步和失败回滚共用快照更新逻辑。同步不会关闭正在填写的表单；保存失败后可以在原表单重试。浏览器原有演示数据及自定义账号保持兼容。
 
 ## 阿里云对接
 
-`src/app.js` 顶部的 CONFIG 预留 `mode` 与 `API_BASE_URL`。当前 `mode: 'mock'` 为本地演示；后端实现 `API.md` 中的接口后可改为 `api` 并重新构建。
+`src/core.js` 顶部的 CONFIG 预留 `mode` 与 `API_BASE_URL`。当前 `mode: 'mock'` 为本地演示；后端实现 `API.md` 中的接口后可改为 `api` 并刷新页面。
 
 当前账号、数据、角色切换与权限隐藏均是前端演示，不构成生产认证或数据隔离。localStorage 不是阿里云数据库，真实账号密码不能使用这里的演示方案。上线时应由后端执行身份认证、权限检查、隐私字段裁剪和数据库事务。本次没有部署网站，也没有访问或修改阿里云服务器。
