@@ -1,0 +1,7 @@
+*
+!package.json
+!index.html
+!src/
+!src/**
+!server/
+!server/**

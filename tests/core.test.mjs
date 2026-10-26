@@ -51,7 +51,7 @@ function setup() {
   // 浏览器逐个执行脚本；分别执行才能发现跨文件初始化顺序错误。
   source.forEach(script => vm.runInContext(script, context));
   const run = (code) => vm.runInContext(code, context);
-  run("db=seed();sessionId='m1'");
+  run("CONFIG.mode='mock';db=seed();sessionId='m1'");
   return { run, context, memory };
 }
 test('种子库存总数、占用和成员状态一致', () => {

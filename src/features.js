@@ -58,7 +58,7 @@ function validateMemberData(data, id = null, self = false) {
   requirePermission(me()?.role === 'teacher' || data.role === 'member', '负责人只能为普通成员创建或维护账号');
   requirePermission(!db.members.some((m) => m.id !== id && m.number === data.number), '该学号 / 工号已存在');
   requirePermission(
-    !db.members.some((m) => m.id !== id && m.username.toLowerCase() === data.username.toLowerCase()),
+    !db.members.some((m) => m.id !== id && m.username?.toLowerCase() === data.username.toLowerCase()),
     '该登录账号已存在，请换一个账号',
   );
 }
@@ -125,7 +125,7 @@ function membersPage() {
       `${badge(m.active ? memberStatus(m) : '已停用')}<small>${esc(m.note || '—')}</small>`,
       `${recordButton('详情', 'member-detail', m.id)}${editableMember(m) ? recordButton('编辑', 'member-edit', m.id) : ''}`,
     ],
-  )}</section><div class="notice">离线是模拟连接状态，不代表成员不在实验室。请假在审批通过后的有效时段内自动生效，结束后恢复原来的工作状态。</div>`;
+  )}</section><div class="notice">工作状态由成员主动更新，不代表实际在线情况。请假在审批通过后的有效时段内自动生效，结束后恢复原来的工作状态。</div>`;
 }
 function assetsPage() {
   const list = db.assets.filter(
@@ -232,7 +232,7 @@ function profilePage() {
       ['加入日期', new Date(u.joined).toLocaleDateString('zh-CN')],
       ['状态备注', u.note || '暂无备注'],
     ],
-  )}<div class="controls-wrap">${btn('编辑个人资料', 'profile-edit', 'primary')}${btn('更新工作状态', 'status')}${btn('申请请假', 'leave-new')}</div><p class="privacy-note">请假状态由有效审批记录决定；请假结束后会自动恢复你设置的工作状态。</p></section><section class="panel"><div class="panel-head"><h2>演示空间</h2>${icon('shield')}</div><div style="padding:0 22px 24px"><p class="muted small" style="line-height:1.9">当前模式：${CONFIG.mode === 'mock' ? '本地模拟数据' : '后端 API'}<br>${CONFIG.mode === 'mock' ? '未连接阿里云。数据仅保存在当前浏览器，同源标签页共享记录。' : '所有操作通过已配置的 API 请求服务器。'}</p>${
+  )}<div class="controls-wrap">${btn('编辑个人资料', 'profile-edit', 'primary')}${btn('更新工作状态', 'status')}${btn('申请请假', 'leave-new')}${CONFIG.mode === 'api' ? btn('修改密码', 'password-change') : ''}</div><p class="privacy-note">请假状态由有效审批记录决定；请假结束后会自动恢复你设置的工作状态。</p></section><section class="panel"><div class="panel-head"><h2>${CONFIG.mode === 'mock' ? '演示空间' : '云端数据'}</h2>${icon('shield')}</div><div style="padding:0 22px 24px"><p class="muted small" style="line-height:1.9">当前模式：${CONFIG.mode === 'mock' ? '本地模拟数据' : '后端 API'}<br>${CONFIG.mode === 'mock' ? '未连接服务器。数据仅保存在当前浏览器，同源标签页共享记录。' : '账号与业务记录保存在服务器数据库，跨设备共享；浏览器不保存账号密码。'}</p>${
     CONFIG.mode === 'mock'
       ? `<div class="field" style="margin-top:22px"><label for="switch-account">切换测试身份</label><select id="switch-account">${options(
           db.members.filter((m) => m.active).map((m) => [m.id, `${m.name} · ${ROLE[m.role]} (${m.username})`]),
@@ -625,6 +625,17 @@ async function handleAction(type, b) {
     document.querySelector('#modal').close();
     return;
   }
+  if (type === 'password-change') {
+    modal('修改登录密码', `${field('当前密码 *', 'currentPassword', '', 'password', 'autocomplete="current-password"')}${passwordFields()}`, '保存新密码', async (form) => {
+      validatePassword(form.get('newPassword'), form.get('confirmPassword'));
+      await API.request('/auth/password', { method: 'POST', body: JSON.stringify({ currentPassword: form.get('currentPassword'), password: form.get('newPassword') }) });
+      await API.load();
+      document.querySelector('#modal').close();
+      render();
+      toast('密码已修改，请重新登录。其他设备也已退出。');
+    });
+    return;
+  }
   if (type === 'reload') {
     await init();
     return;
@@ -678,7 +689,7 @@ async function handleAction(type, b) {
       );
     return confirmation(
       m.active ? '停用成员' : '启用成员',
-      m.active ? '停用后该账号无法登录，成员历史记录会保留。' : '启用后该成员可以重新登录演示空间。',
+      m.active ? '停用后该账号无法登录，成员历史记录会保留。' : '启用后该成员可以重新登录工作台。',
       `/members/${id}/active`,
       { active: !m.active },
       () => {
@@ -811,9 +822,26 @@ async function syncOtherTab(e) {
   }
 }
 window.addEventListener('storage', syncOtherTab);
-let lastStatusSignature = '';
-setInterval(() => {
+let lastStatusSignature = '', cloudSyncRunning = false, syncFailed = false;
+setInterval(async () => {
   if (!me() || document.querySelector('#modal').open || document.activeElement?.matches('input,select,textarea')) return;
+  if (CONFIG.mode === 'api') {
+    if (cloudSyncRunning || API.writing) return;
+    cloudSyncRunning = true;
+    const before = db.revision;
+    try {
+      await API.load();
+      if (syncFailed) toast('已恢复服务器连接');
+      syncFailed = false;
+      if (!me()) { render(); return; }
+      if (before !== db.revision && !document.querySelector('#modal').open && !document.activeElement?.matches('input,select,textarea')) render();
+    } catch (error) {
+      if (!syncFailed) toast('数据同步失败，请检查服务器连接', true);
+      syncFailed = true;
+      return;
+    } finally { cloudSyncRunning = false; }
+  }
+  if (!me()) return;
   const signature =
     db.members.map((m) => memberStatus(m)).join('|') +
     db.loans.map((l) => overdue(l)).join('|') +

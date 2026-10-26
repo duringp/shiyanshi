@@ -1,0 +1,44 @@
+name: xinzhan-lab
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-}
+      APP_BASE_PATH: ${APP_BASE_PATH:-/}
+      HOST: 0.0.0.0
+      PORT: 4173
+      DATABASE_PATH: /app/data/lab.sqlite
+    ports:
+      - "127.0.0.1:4173:4173"
+    volumes:
+      - lab_data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+  caddy:
+    image: caddy:2
+    profiles: [public]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  lab_data:
+  caddy_data:
+  caddy_config:

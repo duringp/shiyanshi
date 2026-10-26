@@ -7,3 +7,11 @@ node_modules/
 .sites-runtime/
 coverage/
 .cache/
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.pem
+*.key
+
+云端登录信息.txt

@@ -1,0 +1,29 @@
+[Unit]
+Description=Xinzhan Lab management system
+After=network.target
+
+[Service]
+Type=simple
+User=xinzhan-lab
+Group=xinzhan-lab
+WorkingDirectory=/opt/xinzhan-lab
+EnvironmentFile=/opt/xinzhan-lab/.env
+Environment=DATABASE_PATH=/var/lib/xinzhan-lab/lab.sqlite
+Environment=HOST=127.0.0.1
+Environment=PORT=4173
+ExecStart=/opt/xinzhan-lab/runtime/bin/node /opt/xinzhan-lab/server/index.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/xinzhan-lab
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=512M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

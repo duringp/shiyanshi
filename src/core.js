@@ -1,6 +1,6 @@
 'use strict';
 // 配置、公共工具与数据操作
-const CONFIG = { mode: 'mock', API_BASE_URL: 'https://your-api.example.com/api', timeout: 10000 };
+const CONFIG = { mode: 'api', API_BASE_URL: './api', timeout: 10000 };
 const DB_KEY = 'xinzhan.lab.demo.v1',
   SESSION_KEY = 'xinzhan.lab.session.v1';
 const ROLE = { teacher: '指导老师', manager: '负责人', member: '普通成员' };
@@ -80,7 +80,7 @@ const API = {
       const r = await fetch(CONFIG.API_BASE_URL + path, {
         ...options,
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...options.headers },
+        headers: { 'Content-Type': 'application/json', 'X-Lab-Request': '1', ...options.headers },
         signal: controller.signal,
       });
       const data = await r.json().catch(() => null);
@@ -98,20 +98,25 @@ const API = {
       clearTimeout(timer);
     }
   },
+  loadGeneration: 0,
   async load() {
+    const generation = ++this.loadGeneration;
     if (CONFIG.mode === 'api') {
       let current;
       try {
         current = await this.request('/auth/me');
       } catch (e) {
         if (e.status === 401) {
+          if (generation !== this.loadGeneration) return;
           sessionId = null;
           db = null;
           return;
         }
         throw e;
       }
-      applySnapshot(await this.request('/workspace'));
+      const snapshot = await this.request('/workspace');
+      if (generation !== this.loadGeneration) return;
+      applySnapshot(snapshot);
       sessionId = current.id;
       return;
     }
@@ -140,8 +145,11 @@ const API = {
   },
   async mutate(path, payload, localAction) {
     if (CONFIG.mode === 'api') {
-      await this.request(path, { method: 'POST', body: JSON.stringify(payload) });
-      await this.load();
+      this.writing = true;
+      try {
+        await this.request(path, { method: 'POST', body: JSON.stringify(payload) });
+        await this.load();
+      } finally { this.writing = false; }
       return;
     }
     const backup = JSON.stringify(db);
@@ -155,8 +163,10 @@ const API = {
   },
   async logout() {
     if (CONFIG.mode === 'api') await this.request('/auth/logout', { method: 'POST' });
+    this.loadGeneration++;
     sessionStorage.removeItem(SESSION_KEY);
     sessionId = null;
+    if (CONFIG.mode === 'api') db = null;
   },
 };
 function me() {
@@ -257,7 +267,7 @@ const RECORD_COLLECTIONS = ['members', 'assets', 'loans', 'leaves', 'maintenance
 function validateSnapshot(snapshot) {
   requirePermission(
     snapshot?.version === 1 && RECORD_COLLECTIONS.filter((key) => key !== 'competitions').every((key) => Array.isArray(snapshot[key])),
-    '演示数据格式无效，请恢复演示数据',
+    '数据格式无效，请刷新后重试',
   );
 }
 function applySnapshot(snapshot) {
